@@ -217,7 +217,7 @@ def main(argv=None) -> int:
     swarm_cmd.add_argument("--repo", required=True)
     swarm_cmd.add_argument("--adapter", default="")
     swarm_cmd.add_argument("--command-file", default="")
-    swarm_cmd.add_argument("--plan", default="", help="Optional workplan JSON; default is exactly one package")
+    swarm_cmd.add_argument("--plan", default="", help="Optional workplan JSON; default is queen-split workers plus soldiers")
     swarm_cmd.add_argument("--write", action="append", default=[], help="Default-package write path (repeatable)")
     swarm_cmd.add_argument("--size", default="M")
     swarm_cmd.add_argument("--source-key", default="")

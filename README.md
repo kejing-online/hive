@@ -72,6 +72,29 @@ intake → plan → implement → verify → review → integrate → release
 
 **Delivery.** After verify/review, `register` freezes the git objects you tested. `integrated` / `released` only accept that SHA. Hive never deploys.
 
+## Swarm
+
+One command to intake, install a plan, and drive workers. It does **not** mark the task released, and it does **not** invent new DAG stages.
+
+```bash
+python -m hive.cli swarm "fix the flaky test" \
+  --repo /path/to/git \
+  --adapter command \
+  --command-file /abs/path/argv.json
+```
+
+`--adapter` is required unless `HIVE_EXECUTOR_ADAPTER` is set. There is no silent default executor.
+
+With no `--plan`, Hive installs **exactly one** package (`worker-1`) allowed to write `.hive-swarm-output`. Pass `--plan plan.json` for several packages. Packages with overlapping write paths never run at the same time; disjoint writers may run in parallel up to `--capacity`.
+
+Watch the hive:
+
+```bash
+python -m hive.cli roster HIVE-…
+```
+
+A failed package is not auto-expanded into new packages. A time window ending returns `window_elapsed`, not a release.
+
 ## Quick start
 
 ```bash

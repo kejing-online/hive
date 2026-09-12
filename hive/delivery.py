@@ -44,11 +44,14 @@ def resolve_ref(repo_path: Path, ref: str) -> str:
 
 
 def _repo_name(repo: Path) -> str:
-    raw = _git(repo, "remote", "get-url", "origin").strip().rstrip("/")
+    try:
+        raw = _git(repo, "remote", "get-url", "origin").strip().rstrip("/")
+    except HiveError:
+        return "local/" + Path(repo).name
     match = re.search(r"github\.com[:/]([^/]+/[^/.]+)", raw)
-    if not match:
-        raise HiveError("origin URL is not a GitHub repository")
-    return match.group(1)
+    if match:
+        return match.group(1)
+    return "local/" + Path(repo).name
 
 
 def _evidence_fingerprint(task: dict[str, Any]) -> str:

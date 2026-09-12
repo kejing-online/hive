@@ -212,6 +212,23 @@ def main(argv=None) -> int:
     repository.add_argument("--state-dir", default="")
     snapshot_cmd = sub.add_parser("snapshot")
     snapshot_cmd.add_argument("--home", default=""); snapshot_cmd.add_argument("--max-age-seconds", type=float, default=900)
+    swarm_cmd = sub.add_parser("swarm", help="Intake, install a plan, drive workers; never releases")
+    swarm_cmd.add_argument("goal")
+    swarm_cmd.add_argument("--repo", required=True)
+    swarm_cmd.add_argument("--adapter", default="")
+    swarm_cmd.add_argument("--command-file", default="")
+    swarm_cmd.add_argument("--plan", default="", help="Optional workplan JSON; default is exactly one package")
+    swarm_cmd.add_argument("--write", action="append", default=[], help="Default-package write path (repeatable)")
+    swarm_cmd.add_argument("--size", default="M")
+    swarm_cmd.add_argument("--source-key", default="")
+    swarm_cmd.add_argument("--owner", default="swarm")
+    swarm_cmd.add_argument("--max-seconds", type=int, default=600)
+    swarm_cmd.add_argument("--max-packages", type=int, default=3)
+    swarm_cmd.add_argument("--capacity", type=int, default=2)
+    swarm_cmd.add_argument("--state-dir", default="")
+    roster_cmd = sub.add_parser("roster", help="Who is running on a task")
+    roster_cmd.add_argument("task_id")
+    roster_cmd.add_argument("--state-dir", default="")
     sub.add_parser("doctor")
     inspect_cmd = sub.add_parser("inspect")
     inspect_cmd.add_argument("task_id")
@@ -224,6 +241,22 @@ def main(argv=None) -> int:
             result = _execution_action(args)
         elif args.cmd == "workplan":
             result = _workplan_action(args)
+        elif args.cmd == "swarm":
+            from .swarm import load_plan_file, swarm
+            plan = load_plan_file(Path(args.plan)) if args.plan else None
+            result = swarm(
+                args.goal, repo=Path(args.repo),
+                adapter=args.adapter or None,
+                command_file=Path(args.command_file) if args.command_file else None,
+                plan=plan, size=args.size, source_key=args.source_key,
+                owner=args.owner, max_seconds=args.max_seconds,
+                max_packages=args.max_packages, capacity=args.capacity,
+                write_paths=args.write or None,
+                state_dir=_dir(args.state_dir),
+            )
+        elif args.cmd == "roster":
+            from .swarm import roster
+            result = roster(args.task_id, state_dir=_dir(args.state_dir))
         elif args.cmd == "doctor":
             from .doctor import report
             result = report()

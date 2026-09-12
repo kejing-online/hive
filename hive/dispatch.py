@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .state import HiveError, _now, _read, _save, locked_task, state_directory
+from . import scent
 from . import workplan_runtime as runtime
 
 _LIVE = {"pending", "starting", "running", "uncertain"}
@@ -172,8 +173,12 @@ def settle(task_id: str, dispatch_id: str, *, owner: str, token: str, success: b
         package = _live_package(task, entry, allow_expired=True)
         if success and not entry.get("session_id"): raise HiveError("successful dispatch requires session acknowledgement")
         package.update(status=desired, lease=None)
-        if success: package["artifact"] = receipt
-        else: package["failure_reason"] = reason
+        if success:
+            package["artifact"] = receipt
+            scent.on_finish(task, package, by=entry["owner"])
+        else:
+            package["failure_reason"] = reason
+            scent.on_fail(task, package, by=entry["owner"])
         entry.update(status=desired, artifact=receipt, reason=reason, settled_at=_now())
         runtime._record(task, "dispatch_settled", dispatch_id=dispatch_id, success=success, artifact=receipt, reason=reason)
         _save(task, directory); return deepcopy(entry)

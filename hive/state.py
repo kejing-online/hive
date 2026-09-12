@@ -115,6 +115,9 @@ def validate_task(task: dict[str, Any]) -> None:
         if task.get("kind", "development") != "development":
             raise HiveError("workplan requires a development task")
         validate_plan(task["workplan"])
+    if "scent" in task:
+        from .scent import load as _load_scent
+        _load_scent(task)
     if "dispatches" in task:
         from .dispatch import validate_dispatches
         validate_dispatches(task)

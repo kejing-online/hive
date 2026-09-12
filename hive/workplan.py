@@ -183,9 +183,8 @@ def select_ready(plan: dict[str, Any], *, capacity: int | None = None,
                  scent_field: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     """Return schedulable queued package ids without changing ``plan``.
 
-    DAG edges and path locks stay law. When ``scent_field`` is present, ready
-    packages are ordered by attraction, and soldiers may follow unverified
-    traces even if a dependency has not been marked succeeded.
+    DAG edges and path locks stay law for every package. When ``scent_field``
+    is present, ready packages are ordered by attraction.
     """
     validate_plan(plan)
     if capacity is not None and (not _is_int(capacity) or capacity < 0):
@@ -198,15 +197,13 @@ def select_ready(plan: dict[str, Any], *, capacity: int | None = None,
     blocked: dict[str, list[str]] = {}
     candidates: list[tuple[float, int, int, dict[str, Any]]] = []
     live = list(scent_field or [])
-    from .scent import attraction, soldier_can_follow_scent
+    from .scent import attraction
     for index, package in enumerate(packages):
         if package["status"] != "queued":
             if package["status"] != "running":
                 blocked[package["id"]] = [f"status is {package['status']}"]
             continue
         reasons = [f"dependency not succeeded: {dep}" for dep in package["depends_on"] if by_id[dep]["status"] != "succeeded"]
-        if reasons and live and soldier_can_follow_scent(package, live):
-            reasons = [row for row in reasons if not row.startswith("dependency not succeeded")]
         if package["attempts"] >= package["max_attempts"]:
             reasons.append("attempt budget exhausted")
         if reasons:

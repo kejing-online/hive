@@ -215,6 +215,12 @@ def heartbeat(task_id: str, package_id: str, *, owner: str, token: str, ttl_seco
             raise HiveError("task is not accepting workplan heartbeats")
         package, lease = _leased_package(task, package_id, owner, token)
         lease["expires_at"] = _expires_at(ttl)
+        # busy decays faster than the default lease; re-lay it on renewal so the
+        # slice never looks free while a live holder still owns it.
+        writes = list(package.get("write_paths") or [])
+        scent.evaporate(task, paths=writes, kinds=("busy",))
+        for path in writes:
+            scent.deposit(task, path=path, kind="busy", by=owner, package_id=package_id)
         _record(task, "workplan_heartbeat", package_id=package_id, owner=owner)
         _save(task, directory)
         return deepcopy(package)
@@ -298,6 +304,8 @@ def recover(task_id: str, *, owner: str, reason: str, state_dir: Path | None = N
             if package.get("status") == "running" and isinstance(package.get("lease"), dict) and _expired(package["lease"]):
                 previous = deepcopy(package["lease"])
                 package.update(status="interrupted", lease=None, interruption_reason=reason)
+                # The holder is gone with its lease; its busy trace must go too.
+                scent.evaporate(task, paths=list(package.get("write_paths") or []), kinds=("busy",))
                 changed.append({"package_id": package["id"], "lease": previous})
         if changed:
             _record(task, "workplan_recovered", owner=owner, reason=reason, packages=changed)

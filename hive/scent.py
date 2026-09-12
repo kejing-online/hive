@@ -93,6 +93,21 @@ def strength(live: list[dict[str, Any]], kind: str, paths: list[str]) -> float:
     return total
 
 
+def _prune(marks: list[Any], *, half_life: float, now: datetime) -> list[Any]:
+    """Drop marks that decayed below EPSILON so persisted fields stay bounded."""
+    kept = []
+    for mark in marks:
+        if not isinstance(mark, dict) or mark.get("kind") not in KINDS:
+            continue
+        try:
+            current = intensity(mark, now=now, half_life=half_life)
+        except HiveError:
+            continue
+        if current >= EPSILON:
+            kept.append(mark)
+    return kept
+
+
 def deposit(task: dict[str, Any], *, path: str, kind: str, by: str, package_id: str = "",
             amount: float = 1.0, now: datetime | None = None) -> dict[str, Any]:
     if kind not in KINDS:
@@ -104,11 +119,13 @@ def deposit(task: dict[str, Any], *, path: str, kind: str, by: str, package_id: 
     if not isinstance(amount, (int, float)) or isinstance(amount, bool) or amount <= 0:
         raise HiveError("scent intensity must be positive")
     payload = load(task)
+    stamp = now or _now()
+    payload["marks"] = _prune(payload["marks"], half_life=payload["half_life_seconds"], now=stamp)
     payload["marks"].append({
         "path": path.strip(),
         "kind": kind,
         "intensity": float(amount),
-        "at": (now or _now()).isoformat(),
+        "at": stamp.isoformat(),
         "by": by.strip(),
         "package_id": package_id,
     })
@@ -177,19 +194,3 @@ def attraction(package: dict[str, Any], live: list[dict[str, Any]]) -> float:
     if ident.startswith("soldier-"):
         return strength(live, "unverified", reads) - 2 * busy - 2 * alarm
     return strength(live, "need", writes) - 2 * busy - 2 * alarm
-
-
-def soldier_can_follow_scent(package: dict[str, Any], live: list[dict[str, Any]]) -> bool:
-    """Soldiers may move on unverified traces even if a DAG edge is still open.
-
-    They still refuse a slice that is busy or in alarm.
-    """
-    if not str(package.get("id") or "").startswith("soldier-"):
-        return False
-    reads = list(package.get("read_paths") or [])
-    writes = list(package.get("write_paths") or [])
-    if strength(live, "busy", reads + writes) >= EPSILON:
-        return False
-    if strength(live, "alarm", reads + writes) >= EPSILON:
-        return False
-    return strength(live, "unverified", reads) >= 0.3

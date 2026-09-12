@@ -85,7 +85,7 @@ python -m hive.cli swarm "fix the flaky test" \
 
 `--adapter` is required unless `HIVE_EXECUTOR_ADAPTER` is set. There is no silent default executor.
 
-With no `--plan`, Hive installs **exactly one** package (`worker-1`) allowed to write `.hive-swarm-output`. Pass `--plan plan.json` for several packages. Packages with overlapping write paths never run at the same time; disjoint writers may run in parallel up to `--capacity`.
+With no `--plan`, the **queen** splits the repo: one **worker** per top-level directory (or file), then **soldiers** `soldier-verify` and `soldier-review` that depend on those workers. Pass `--plan plan.json` to supply the graph yourself. Packages with overlapping write paths never run at the same time; disjoint workers may run in parallel up to `--capacity`. Soldiers wait until workers finish. The queen only schedules — she does not implement, and `swarm` never marks `released`.
 
 Watch the hive:
 

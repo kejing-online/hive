@@ -13,7 +13,7 @@ from io import StringIO
 
 from hive.cli import main as hive_main
 from hive.state import HiveError
-from hive.swarm import default_plan, resolve_adapter, roster, swarm
+from hive.swarm import auto_plan, default_plan, resolve_adapter, roster, swarm
 from hive.workplan import _conflicts, normalize_plan
 
 
@@ -37,10 +37,29 @@ class ResolveAdapterTests(unittest.TestCase):
 
 
 class DefaultPlanTests(unittest.TestCase):
-    def test_exactly_one_package(self):
+    def test_queen_splits_workers_and_soldiers(self):
+        root = Path(tempfile.mkdtemp())
+        (root / "src").mkdir()
+        (root / "docs").mkdir()
+        (root / "src" / "a.py").write_text("a\n")
+        (root / "docs" / "n.md").write_text("n\n")
+        plan = normalize_plan(auto_plan("demo", repo=root))
+        ids = [p["id"] for p in plan["packages"]]
+        workers = [i for i in ids if i.startswith("worker-")]
+        self.assertGreaterEqual(len(workers), 2, ids)
+        self.assertIn("soldier-verify", ids)
+        self.assertIn("soldier-review", ids)
+        verify = next(p for p in plan["packages"] if p["id"] == "soldier-verify")
+        self.assertEqual(set(verify["depends_on"]), set(workers))
+        review = next(p for p in plan["packages"] if p["id"] == "soldier-review")
+        self.assertEqual(review["depends_on"], ["soldier-verify"])
+
+    def test_fallback_still_has_soldier_gate(self):
         plan = normalize_plan(default_plan("demo"))
-        self.assertEqual(len(plan["packages"]), 1)
-        self.assertEqual(plan["packages"][0]["id"], "worker-1")
+        ids = [p["id"] for p in plan["packages"]]
+        self.assertTrue(any(i.startswith("worker-") for i in ids))
+        self.assertIn("soldier-verify", ids)
+        self.assertIn("soldier-review", ids)
 
     def test_write_conflict_blocks_parallel(self):
         left = {"read_paths": [], "write_paths": ["a.py"]}
@@ -99,7 +118,14 @@ class SwarmCliTests(unittest.TestCase):
         script.write_text(
             "import json, os\n"
             "from pathlib import Path\n"
-            "Path(os.environ['HIVE_WORKTREE'], '.hive-swarm-output').write_text('ok\\n')\n"
+            "root = Path(os.environ['HIVE_WORKTREE'])\n"
+            "prompt = Path(os.environ['HIVE_PROMPT_FILE']).read_text()\n"
+            "start = prompt.find('{')\n"
+            "spec = json.loads(prompt[start:])\n"
+            "for rel in spec['package']['write_paths']:\n"
+            "    dest = root / rel\n"
+            "    dest.parent.mkdir(parents=True, exist_ok=True)\n"
+            "    dest.write_text('ok\\n')\n"
             "Path(os.environ['HIVE_OUTPUT_FILE']).write_text("
             "json.dumps({'status':'completed','summary':'ok','remaining':[]}))\n"
             "print(json.dumps({'type':'session.started','session_id':'swarm-1'}), flush=True)\n"
@@ -119,7 +145,10 @@ class SwarmCliTests(unittest.TestCase):
         self.assertEqual(code, 0, body)
         payload = json.loads(body)["task"]
         self.assertFalse(payload["released"])
-        self.assertEqual(len(payload["roster"]["packages"]), 1)
+        roles = payload["roles"]
+        self.assertGreaterEqual(roles["worker"], 1)
+        self.assertEqual(roles["soldier"], 2)
+        self.assertEqual(payload["roster"]["queen"]["role"], "queen")
         deadline = time.monotonic() + 20
         while time.monotonic() < deadline:
             board = roster(payload["task_id"], state_dir=self.state)
@@ -127,7 +156,8 @@ class SwarmCliTests(unittest.TestCase):
             if statuses & {"succeeded", "failed", "uncertain"} or payload["terminal"] == "complete":
                 break
             time.sleep(0.05)
-        self.assertIn(payload["roster"]["packages"][0]["package_id"], {"worker-1"})
+        self.assertTrue(any(p["role"] == "worker" for p in payload["roster"]["packages"]))
+        self.assertTrue(any(p["package_id"] == "soldier-review" for p in payload["roster"]["packages"]))
         rcode, rbody = self.run_cli([
             "roster", payload["task_id"], "--state-dir", str(self.state),
         ])

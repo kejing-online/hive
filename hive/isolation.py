@@ -214,9 +214,14 @@ def unix_read_roots() -> list[Path]:
 def command_read_roots(write_roots: list[Path], command: list[str]) -> list[Path]:
     roots = unix_read_roots() + [Path(root).resolve() for root in write_roots]
     if command:
-        binary = Path(command[0])
-        if binary.exists():
-            roots.append(binary.resolve().parent)
+        for item in command:
+            path = Path(item)
+            try:
+                resolved = path.resolve()
+            except OSError:
+                continue
+            if resolved.exists() and resolved.is_file():
+                roots.append(resolved.parent)
     seen: set[str] = set()
     ordered: list[Path] = []
     for root in roots:

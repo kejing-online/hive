@@ -52,13 +52,16 @@ python -m hive.cli swarm "fix the flaky tests" \
   --adapter grok
 ```
 
-Command adapter (fixed argv JSON, no shell):
+Command adapter (fixed argv JSON, no shell). `examples/worker.py` stamps assigned paths:
 
 ```bash
-python -m hive.cli swarm "fix the flaky tests" \
+python -c 'import json,sys; json.dump([sys.executable, "examples/worker.py"], open("/tmp/hive-argv.json","w"))'
+hive swarm "stamp the slices" \
   --repo /path/to/git \
   --adapter command \
-  --command-file /abs/path/argv.json
+  --command-file /tmp/hive-argv.json
+hive roster HIVE-…
+hive scent HIVE-…
 ```
 
 With no `--plan`, the queen scans top-level directories (or files) and builds:

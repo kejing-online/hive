@@ -1,10 +1,11 @@
 import json
 from pathlib import Path
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
 
-from hive import execution_adapters
+from hive import execution_adapters, isolation
 from hive.state import HiveError
 
 
@@ -19,6 +20,13 @@ class ExecutionAdapterTests(unittest.TestCase):
             path.write_text(json.dumps("not argv"))
             with self.assertRaises(HiveError):
                 execution_adapters.select("command", command_file=path)
+
+    def test_command_read_roots_include_script_parent(self):
+        with tempfile.TemporaryDirectory() as temp:
+            script = Path(temp) / "worker.py"
+            script.write_text("print(1)\n")
+            roots = {str(path) for path in isolation.command_read_roots([], [sys.executable, str(script)])}
+            self.assertIn(str(script.resolve().parent), roots)
 
     def test_grok_probe_shape_requires_real_response_identity(self):
         with tempfile.TemporaryDirectory() as temp:

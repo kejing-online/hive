@@ -165,6 +165,9 @@ def launch(task_id, dispatch_id, *, repo: Path, base_ref="HEAD", model=None,
         child = subprocess.Popen([sys.executable, "-m", "hive.executor", "supervise", task_id, dispatch_id,
                                   "--state-dir", str(directory)], cwd=SOURCE, stdin=subprocess.DEVNULL,
                                  stdout=output, stderr=subprocess.STDOUT, start_new_session=True, close_fds=True)
+    identity = _identity(child.pid)
+    if identity:
+        _write(execution_dir / "process.json", {"supervisor": identity, "at": _now(), "pid": child.pid})
     return {"dispatch_id": dispatch_id, "supervisor_pid": child.pid, "worktree": workspace["worktree"], "status": "starting"}
 
 
@@ -424,7 +427,8 @@ def drive(task_id, *, repo, owner, model=None, adapter=None, command_file=None, 
             run(task_id, package_id, repo=repo, owner=owner, model=model, adapter=adapter, command_file=command_file, state_dir=directory)
             launched += 1
         current = dispatch.list_entries(task_id, state_dir=directory)
-        if not any(entry["status"] in {"pending", "starting", "running"} for entry in current):
+        live = {"pending", "starting", "running", "uncertain"}
+        if not any(entry["status"] in live for entry in current):
             return {"task_id": task_id, "launched": launched, "dispatches": current}
         time.sleep(min(2, max(0, deadline-time.monotonic())))
     return {"task_id": task_id, "launched": launched, "status": "window_elapsed",

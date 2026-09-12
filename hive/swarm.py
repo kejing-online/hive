@@ -210,9 +210,15 @@ def swarm(goal: str, *, repo: Path, adapter: str | None = None,
         max_packages=max_packages, capacity=capacity, state_dir=state_dir,
     )
     board = roster(task_id, state_dir=state_dir)
-    terminal = driven.get("status") or "complete"
-    if any(row.get("status") == "failed" for row in driven.get("dispatches") or []):
+    statuses = {row.get("status") for row in driven.get("dispatches") or []}
+    if driven.get("status") == "window_elapsed":
+        terminal = "window_elapsed"
+    elif "failed" in statuses:
         terminal = "blocked"
+    elif "uncertain" in statuses or "starting" in statuses or "running" in statuses or "pending" in statuses:
+        terminal = "in_flight"
+    else:
+        terminal = "complete"
     return {
         "task_id": task_id,
         "adapter": adapter_name,

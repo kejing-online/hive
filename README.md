@@ -69,7 +69,7 @@ With no `--plan`, the queen scans top-level directories (or files) and builds:
 
 Disjoint workers may run together up to `--capacity` (default 4). Overlapping write paths stay serial. A failed package is not exploded into new packages. A time window ending is `window_elapsed`, not a release. `swarm` never sets `released`.
 
-The queen lays **scent** (`need`) on each worker slice. A claiming worker deposits `busy`, re-laid on every heartbeat renewal; a successful finish (manual `finish` or outbox `dispatch.settle`) evaporates `busy` and leaves `done` + `unverified`, while a failure leaves `alarm`. Marks decay (half-life 300s; below 0.05 they are gone, and expired marks are cleaned up when state is written). The stage DAG is law for workers and soldiers alike: traces never bypass a dependency edge — they only rank legal candidates (`need` attracts workers, `unverified` attracts soldiers, `alarm`/`busy` repel) and stay visible in `roster` and `hive scent`. See [docs/SCENT.md](docs/SCENT.md).
+The queen lays **scent** (`need`) on each worker slice. A claiming worker deposits `busy` (refreshed on heartbeat). Finish leaves `done` + `unverified` and a weaker `unverified` on parent paths; it also boosts `need` on still-queued sibling slices. Failure leaves `alarm` on the slice and its parents. Marks decay (half-life 300s). The DAG stays law — scent ranks legal candidates, it does not skip edges. See [docs/SCENT.md](docs/SCENT.md).
 
 Pass `--plan plan.json` to supply the graph. Pass `--write path` (repeatable) to choose worker slices yourself.
 

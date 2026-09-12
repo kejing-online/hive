@@ -287,9 +287,10 @@ def main(argv=None) -> int:
             from .swarm import roster
             result = roster(args.task_id, state_dir=_dir(args.state_dir))
         elif args.cmd == "scent":
-            from .scent import field
+            from .scent import field, map_field
             from .state import load_task
-            result = {"task_id": args.task_id, "marks": field(load_task(args.task_id, state_dir=_dir(args.state_dir)))}
+            task = load_task(args.task_id, state_dir=_dir(args.state_dir))
+            result = {"task_id": args.task_id, "marks": field(task), "map": map_field(task)}
         elif args.cmd == "doctor":
             from .doctor import report
             result = report()

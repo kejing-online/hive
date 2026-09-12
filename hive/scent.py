@@ -135,6 +135,29 @@ def deposit(task: dict[str, Any], *, path: str, kind: str, by: str, package_id: 
     return payload
 
 
+def _ancestors(path: str) -> list[str]:
+    parts = [part for part in str(path).split("/") if part and part != "."]
+    return ["/".join(parts[:index]) for index in range(1, len(parts))]
+
+
+def map_field(task: dict[str, Any], *, now: datetime | None = None) -> list[dict[str, Any]]:
+    """Net intensity per path. Neighbourhood view, not a chat log."""
+    buckets: dict[str, dict[str, float]] = {}
+    for mark in field(task, now=now):
+        slot = buckets.setdefault(str(mark.get("path") or ""), {kind: 0.0 for kind in KINDS})
+        kind = str(mark.get("kind") or "")
+        if kind in slot:
+            slot[kind] += float(mark["intensity"])
+    rows = []
+    for path, kinds in sorted(buckets.items()):
+        row = {"path": path}
+        for kind, value in kinds.items():
+            if value:
+                row[kind] = round(value, 4)
+        rows.append(row)
+    return rows
+
+
 def evaporate(task: dict[str, Any], *, paths: list[str], kinds: tuple[str, ...] | list[str]) -> None:
     payload = load(task)
     kept = []
@@ -178,13 +201,38 @@ def on_finish(task: dict[str, Any], package: dict[str, Any], *, by: str) -> None
     for path in writes:
         deposit(task, path=path, kind="done", by=by, package_id=ident)
         deposit(task, path=path, kind="unverified", by=by, package_id=ident)
+        for parent in _ancestors(path):
+            deposit(task, path=parent, kind="unverified", by=by, package_id=ident, amount=0.5)
+    _recruit(task, package, by=by)
 
 
 def on_fail(task: dict[str, Any], package: dict[str, Any], *, by: str) -> None:
     paths = list(package.get("write_paths") or []) + list(package.get("read_paths") or [])
     evaporate(task, paths=paths, kinds=("busy",))
+    ident = str(package.get("id") or "")
     for path in package.get("write_paths") or []:
-        deposit(task, path=path, kind="alarm", by=by, package_id=str(package.get("id") or ""))
+        deposit(task, path=path, kind="alarm", by=by, package_id=ident)
+        for parent in _ancestors(path):
+            deposit(task, path=parent, kind="alarm", by=by, package_id=ident, amount=0.5)
+
+
+def _recruit(task: dict[str, Any], finished: dict[str, Any], *, by: str) -> None:
+    """Waggle analog: a finished worker boosts need on still-queued sibling slices."""
+    plan = task.get("workplan") or {}
+    finished_id = str(finished.get("id") or "")
+    if not finished_id.startswith("worker-"):
+        return
+    for other in plan.get("packages") or []:
+        if not isinstance(other, dict):
+            continue
+        if str(other.get("id") or "") == finished_id:
+            continue
+        if not str(other.get("id") or "").startswith("worker-"):
+            continue
+        if other.get("status") != "queued":
+            continue
+        for path in other.get("write_paths") or []:
+            deposit(task, path=path, kind="need", by=by, package_id=finished_id, amount=0.4)
 
 
 def attraction(package: dict[str, Any], live: list[dict[str, Any]]) -> float:

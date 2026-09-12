@@ -7,7 +7,7 @@ import tempfile
 import unittest
 
 from hive import dispatch
-from hive.scent import DEFAULT_HALF_LIFE, deposit, field, intensity, on_finish, on_queen_plan
+from hive.scent import DEFAULT_HALF_LIFE, deposit, field, intensity, map_field, on_fail, on_finish, on_queen_plan
 from hive.state import HiveError, create_task, locked_task, mark_node, validate_task, _read, _save
 from hive.workplan import normalize_plan, select_ready
 from hive.workplan_runtime import claim, heartbeat, install, recover
@@ -81,6 +81,36 @@ class ScentTests(unittest.TestCase):
         deposit(task, path="alarm/out", kind="alarm", by="worker", amount=1.0)
         ready = select_ready(plan, scent_field=field(task))
         self.assertEqual(ready["ready"], ["worker-high", "worker-low", "worker-alarm"])
+
+    def test_alarm_diffuses_to_parent_paths(self):
+        task = {}
+        on_fail(task, _pkg("worker-api", writes=["src/api.py"]), by="worker")
+        kinds = {(m["path"], m["kind"]) for m in field(task)}
+        self.assertIn(("src/api.py", "alarm"), kinds)
+        self.assertIn(("src", "alarm"), kinds)
+
+    def test_finished_worker_recruits_queued_siblings(self):
+        packages = [
+            _pkg("worker-src", writes=["src"]),
+            _pkg("worker-docs", writes=["docs"]),
+        ]
+        task = {"workplan": {"packages": packages}}
+        finished = dict(packages[0])
+        finished["status"] = "succeeded"
+        on_finish(task, finished, by="worker")
+        docs_need = [m for m in field(task) if m["path"] == "docs" and m["kind"] == "need"]
+        self.assertTrue(docs_need)
+        self.assertGreaterEqual(docs_need[0]["intensity"], 0.3)
+        self.assertEqual(docs_need[0]["package_id"], "worker-src")
+
+    def test_map_groups_marks_by_path(self):
+        task = {}
+        deposit(task, path="src", kind="need", by="queen", amount=1.0)
+        deposit(task, path="src", kind="alarm", by="worker", amount=0.5)
+        rows = {row["path"]: row for row in map_field(task)}
+        self.assertIn("src", rows)
+        self.assertGreater(rows["src"]["need"], 0.5)
+        self.assertGreater(rows["src"]["alarm"], 0.2)
 
     def test_without_scent_soldier_waits_for_dependencies(self):
         packages = [

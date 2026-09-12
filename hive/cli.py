@@ -155,6 +155,19 @@ def main(argv=None) -> int:
     sub = parser.add_subparsers(dest="cmd", required=True)
     _execution_parser(sub)
     _workplan_parser(sub)
+    classify_cmd = sub.add_parser("classify"); classify_cmd.add_argument("goal")
+    factory_cmd = sub.add_parser("factory")
+    factory_sub = factory_cmd.add_subparsers(dest="factory_action", required=True)
+    factory_admit = factory_sub.add_parser("admit")
+    factory_admit.add_argument("ticket")
+    factory_admit.add_argument("--home", required=True)
+    factory_admit.add_argument("--launch-model", action="store_true")
+    factory_reason = factory_sub.add_parser("reason")
+    factory_reason.add_argument("ticket")
+    factory_reason.add_argument("--home", required=True)
+    factory_project = factory_sub.add_parser("project")
+    factory_project.add_argument("ticket")
+    factory_project.add_argument("--home", required=True)
     intake = sub.add_parser("intake"); intake.add_argument("goal"); intake.add_argument("--size", default="M"); intake.add_argument("--state-dir", default="")
     intake.add_argument("--source-key", default="")
     intake.add_argument("--kind", choices=("development", "analysis"), default="development")
@@ -237,7 +250,20 @@ def main(argv=None) -> int:
     mcp_cmd.add_argument("--serve", action="store_true", help="stdio MCP; argv tools only")
     args = parser.parse_args(argv)
     try:
-        if args.cmd == "execute":
+        if args.cmd == "classify":
+            from .classify import classify_goal
+            result = classify_goal(args.goal)
+        elif args.cmd == "factory":
+            from .factory import admission_reason, admit, project
+            ticket = json.loads(Path(args.ticket).read_text(encoding="utf-8"))
+            home = Path(args.home)
+            if args.factory_action == "reason":
+                result = {"reason": admission_reason(ticket, home)}
+            elif args.factory_action == "admit":
+                result = admit(ticket, home, launch_model=args.launch_model)
+            else:
+                result = project(ticket, home)
+        elif args.cmd == "execute":
             result = _execution_action(args)
         elif args.cmd == "workplan":
             result = _workplan_action(args)

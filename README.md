@@ -135,17 +135,32 @@ python -m hive.cli register HIVE-… /path/to/repo HEAD
 python -m hive.cli guard-ref /path/to/repo HEAD --phase release
 ```
 
-## MCP
+## Classify, factory, MCP
 
-Stdio, argv only — not a permission boundary.
+Size a goal without starting work:
+
+```bash
+python -m hive.cli classify "hotfix typo in the readme"
+```
+
+Admit a queued factory ticket onto the same Hive identity (pause file at `$HOME/PAUSE` blocks it):
+
+```bash
+python -m hive.cli factory admit ticket.json --home "$HIVE_HOME"
+python -m hive.cli factory reason ticket.json --home "$HIVE_HOME"
+```
+
+Host-specific budget, kernel, and deploy locks stay in the host. This package only does pause, queued-ticket policy, and source-key binding.
+
+MCP whitelist: `hive_classify`, `hive_start`, `hive_record`, `hive_status`, `hive_doctor`, `hive_snapshot`, `hive_inspect`, `hive_roster`.
 
 ```bash
 python -m hive.cli mcp --serve
 ```
 
-Whitelist: `hive_doctor`, `hive_status`, `hive_inspect`.
+MCP is stdio, argv only — not a permission boundary. Not on the whitelist: `ads_server`, `deploy_to_prod`, unrestricted `shell`, `composio`.
 
-Not on the whitelist: `ads_server`, `deploy_to_prod`, unrestricted `shell`, `composio`.
+Manual law, adapters, and evidence: [docs/WORKFLOW.md](docs/WORKFLOW.md), [docs/PORTABLE.md](docs/PORTABLE.md), [docs/EXECUTION.md](docs/EXECUTION.md).
 
 ## Environment
 

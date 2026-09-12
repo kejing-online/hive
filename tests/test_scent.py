@@ -101,6 +101,18 @@ class ScentTests(unittest.TestCase):
         self.assertEqual([mark["path"] for mark in task["scent"]["marks"]], ["new/src"])
         self.assertEqual({mark["path"] for mark in field(task, now=later)}, {"new/src"})
 
+    def test_deposit_rejects_naive_now(self):
+        task = {}
+        with self.assertRaises(HiveError):
+            deposit(task, path="src", kind="need", by="queen", now=datetime(2026, 1, 1))
+        self.assertNotIn("scent", task)
+
+    def test_deposit_naive_now_with_existing_marks_stays_a_domain_error(self):
+        task = {}
+        deposit(task, path="old/src", kind="need", by="queen", now=datetime(2026, 1, 1, tzinfo=timezone.utc))
+        with self.assertRaises(HiveError):
+            deposit(task, path="new/src", kind="need", by="queen", now=datetime(2026, 1, 1, 0, 0, 1))
+
 
 class _InstalledTask(unittest.TestCase):
     def setUp(self):

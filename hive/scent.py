@@ -118,8 +118,10 @@ def deposit(task: dict[str, Any], *, path: str, kind: str, by: str, package_id: 
         raise HiveError("scent depositor is required")
     if not isinstance(amount, (int, float)) or isinstance(amount, bool) or amount <= 0:
         raise HiveError("scent intensity must be positive")
-    payload = load(task)
     stamp = now or _now()
+    if stamp.tzinfo is None:
+        raise HiveError("scent timestamp must be timezone-aware ISO-8601")
+    payload = load(task)
     payload["marks"] = _prune(payload["marks"], half_life=payload["half_life_seconds"], now=stamp)
     payload["marks"].append({
         "path": path.strip(),

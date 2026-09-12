@@ -51,16 +51,19 @@ def parse_grok_events(path: Path):
         return result
     if not isinstance(value, dict):
         return result
+    if value.get("type") == "error" or value.get("error"):
+        result["failed"] = True
+        return result
     identity = value.get("sessionId")
     report = value.get("structuredOutput")
     if isinstance(identity, str) and identity:
         result["session_id"] = identity
     result["usage"] = _usage(value.get("usage"))
-    if value.get("stopReason") == "end_turn" and isinstance(report, dict):
-        if report.get("status") == "completed":
-            result["completed"] = True
-        elif report.get("status") == "blocked":
+    if value.get("stopReason") == "end_turn":
+        if isinstance(report, dict) and report.get("status") == "blocked":
             result["failed"] = True
+        else:
+            result["completed"] = True
     return result
 
 
@@ -87,7 +90,12 @@ def report_from_output(name: str, events_path: Path):
     except ValueError:
         return None
     report = value.get("structuredOutput") if isinstance(value, dict) else None
-    return report if isinstance(report, dict) else None
+    if isinstance(report, dict) and report.get("status") in {"completed", "blocked"}:
+        return report
+    if isinstance(value, dict) and value.get("stopReason") == "end_turn" and value.get("sessionId"):
+        text = value.get("text") if isinstance(value.get("text"), str) else ""
+        return {"status": "completed", "summary": (text.strip() or "completed")[:500], "remaining": []}
+    return None
 
 
 def _command_file(value):
@@ -165,7 +173,8 @@ def build(spec, *, worktree: str, prompt_file: Path, output_file: Path, schema_f
             command[2:2] = ["--model", model]
         return command
     command = [spec["binary"], "--prompt-file", str(prompt_file), "--cwd", worktree,
-               "--always-approve", "--no-subagents", "--max-turns", "20", "--output-format", "json", "--json-schema", schema_file.read_text()]
+               "--always-approve", "--no-subagents", "--max-turns", "12",
+               "--output-format", "json", "--disable-web-search"]
     if model is not None:
         command += ["--model", model]
     return command

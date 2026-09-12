@@ -36,8 +36,10 @@ class ExecutionAdapterTests(unittest.TestCase):
             self.assertEqual(events["session_id"], "actual-session")
             self.assertTrue(events["completed"])
             self.assertEqual(execution_adapters.report_from_output("grok", path)["status"], "completed")
-            path.write_text(json.dumps({"sessionId": "requested", "stopReason": "end_turn"}))
-            self.assertFalse(execution_adapters.parse_grok_events(path)["completed"])
+            path.write_text(json.dumps({"sessionId": "plain-turn", "stopReason": "end_turn", "text": "Hi"}))
+            events = execution_adapters.parse_grok_events(path)
+            self.assertTrue(events["completed"])
+            self.assertEqual(execution_adapters.report_from_output("grok", path)["summary"], "Hi")
 
     def test_grok_failure_is_not_completion(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -46,6 +48,15 @@ class ExecutionAdapterTests(unittest.TestCase):
             events = execution_adapters.parse_grok_events(path)
             self.assertFalse(events["completed"])
             self.assertFalse(events["failed"])
+
+    def test_grok_json_schema_is_not_on_argv(self):
+        spec = {"name": "grok", "binary": "/bin/true", "stdin_prompt": False}
+        command = execution_adapters.build(
+            spec, worktree="/tmp", prompt_file=Path("/tmp/p"), output_file=Path("/tmp/o"),
+            schema_file=Path("/tmp/p"), model=None,
+        )
+        self.assertNotIn("--json-schema", command)
+        self.assertIn("--disable-web-search", command)
 
 
 if __name__ == "__main__":

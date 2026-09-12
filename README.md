@@ -67,7 +67,9 @@ With no `--plan`, the queen scans top-level directories (or files) and builds:
 - **soldier-verify** (depends on every worker)
 - **soldier-review** (depends on verify)
 
-Disjoint workers may run together up to `--capacity` (default 4). Overlapping write paths stay serial. Soldiers wait. A failed package is not exploded into new packages. A time window ending is `window_elapsed`, not a release. `swarm` never sets `released`.
+Disjoint workers may run together up to `--capacity` (default 4). Overlapping write paths stay serial. A failed package is not exploded into new packages. A time window ending is `window_elapsed`, not a release. `swarm` never sets `released`.
+
+The queen lays **scent** (`need`) on each worker slice. A claiming worker deposits `busy`; on finish it leaves `done` and `unverified`. Soldiers follow `unverified`. Marks decay (half-life 300s). Workers still obey the DAG; soldiers may move on unverified traces without waiting for every edge, but never onto `busy` or `alarm`. See [docs/SCENT.md](docs/SCENT.md).
 
 Pass `--plan plan.json` to supply the graph. Pass `--write path` (repeatable) to choose worker slices yourself.
 
@@ -75,6 +77,7 @@ Pass `--plan plan.json` to supply the graph. Pass `--write path` (repeatable) to
 
 ```bash
 python -m hive.cli roster HIVE-…
+python -m hive.cli scent HIVE-…
 ```
 
 The JSON names the queen and lists each package’s `role` (`worker` | `soldier`), `status`, and `owner`.
@@ -152,7 +155,7 @@ python -m hive.cli factory reason ticket.json --home "$HIVE_HOME"
 
 Host-specific budget, kernel, and deploy locks stay in the host. This package only does pause, queued-ticket policy, and source-key binding.
 
-MCP whitelist: `hive_classify`, `hive_start`, `hive_record`, `hive_status`, `hive_doctor`, `hive_snapshot`, `hive_inspect`, `hive_roster`.
+MCP whitelist: `hive_classify`, `hive_start`, `hive_record`, `hive_status`, `hive_doctor`, `hive_snapshot`, `hive_inspect`, `hive_roster`, `hive_scent`.
 
 ```bash
 python -m hive.cli mcp --serve
@@ -160,7 +163,7 @@ python -m hive.cli mcp --serve
 
 MCP is stdio, argv only — not a permission boundary. Not on the whitelist: `ads_server`, `deploy_to_prod`, unrestricted `shell`, `composio`.
 
-Manual law, adapters, and evidence: [docs/WORKFLOW.md](docs/WORKFLOW.md), [docs/PORTABLE.md](docs/PORTABLE.md), [docs/EXECUTION.md](docs/EXECUTION.md).
+Manual law, adapters, scent, and evidence: [docs/WORKFLOW.md](docs/WORKFLOW.md), [docs/PORTABLE.md](docs/PORTABLE.md), [docs/EXECUTION.md](docs/EXECUTION.md), [docs/SCENT.md](docs/SCENT.md).
 
 ## Environment
 

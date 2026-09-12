@@ -10,7 +10,7 @@ from . import isolation
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MCP_TOOLS = (
     "hive_classify", "hive_start", "hive_record", "hive_status",
-    "hive_doctor", "hive_snapshot", "hive_inspect", "hive_roster",
+    "hive_doctor", "hive_snapshot", "hive_inspect", "hive_roster", "hive_scent",
 )
 
 

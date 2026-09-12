@@ -12,7 +12,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from . import dispatch, executor, workplan_runtime
+from . import dispatch, executor, scent, workplan_runtime
 from .intake import ensure_task
 from .state import HiveError, load_task, mark_node, state_directory
 
@@ -149,6 +149,7 @@ def roster(task_id: str, *, state_dir: Path | None = None) -> dict[str, Any]:
         "task_status": task.get("status"),
         "goal": task.get("goal"),
         "queen": {"role": "queen", "owner": SWARM_OWNER, "job": "schedule"},
+        "scent": scent.field(task),
         "packages": packages,
         "dispatches": [
             {"dispatch_id": row.get("id"), "status": row.get("status"),

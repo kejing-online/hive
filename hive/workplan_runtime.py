@@ -14,6 +14,7 @@ import secrets
 from typing import Any
 
 from .state import HiveError, _now, _read, _save, locked_task, state_directory
+from . import scent
 from .workplan import normalize_plan, select_ready, validate_plan
 
 
@@ -131,6 +132,7 @@ def install(task_id: str, spec: dict[str, Any], *, owner: str, state_dir: Path |
         if _already_executed(task):
             raise HiveError("workplan cannot be installed after implementation or delivery registration")
         task["workplan"] = plan
+        scent.on_queen_plan(task, plan["packages"], by=owner)
         _record(task, "workplan_installed", owner=owner)
         _save(task, directory)
         return deepcopy(plan)
@@ -143,7 +145,7 @@ def status(task_id: str, *, capacity: int | None = None, state_dir: Path | None 
     if plan is None:
         raise HiveError("workplan is not installed")
     validate_plan(plan)
-    projection = select_ready(deepcopy(plan), capacity=capacity)
+    projection = select_ready(deepcopy(plan), capacity=capacity, scent_field=scent.field(task))
     if not _task_accepts_work(task) or not _plan_node_done(task):
         reason = _task_block_reason(task)
         projection["blocked"] = {**projection["blocked"], **{
@@ -162,13 +164,14 @@ def _claim(task: dict[str, Any], package_id: str, owner: str, ttl: int) -> dict[
         raise HiveError("workplan is not installed")
     validate_plan(plan)
     package = _package(plan, package_id)
-    if package_id not in select_ready(plan).get("ready", []):
+    if package_id not in select_ready(plan, scent_field=scent.field(task)).get("ready", []):
         raise HiveError("workplan package is not ready")
     if package["attempts"] >= package["max_attempts"]:
         raise HiveError("workplan package has exhausted its attempts")
     package["attempts"] += 1
     package["status"] = "running"
     package["lease"] = {"token": secrets.token_urlsafe(24), "owner": owner, "expires_at": _expires_at(ttl)}
+    scent.on_claim(task, package, by=owner)
     _record(task, "workplan_claimed", package_id=package_id, owner=owner, attempt=package["attempts"])
     return package
 
@@ -256,6 +259,7 @@ def finish(task_id: str, package_id: str, *, owner: str, token: str, artifact: s
             raise HiveError("active dispatch must be settled through the outbox")
         package, _lease = _leased_package(task, package_id, owner, token)
         package.update(status="succeeded", lease=None, artifact=receipt)
+        scent.on_finish(task, package, by=owner)
         _record(task, "workplan_finished", package_id=package_id, owner=owner, artifact=receipt)
         _save(task, directory)
         return deepcopy(package)
@@ -272,6 +276,7 @@ def fail(task_id: str, package_id: str, *, owner: str, token: str, reason: str,
             raise HiveError("active dispatch must be settled through the outbox")
         package, _lease = _leased_package(task, package_id, owner, token)
         package.update(status="failed", lease=None, failure_reason=reason)
+        scent.on_fail(task, package, by=owner)
         _record(task, "workplan_failed", package_id=package_id, owner=owner, reason=reason)
         _save(task, directory)
         return deepcopy(package)
@@ -317,6 +322,9 @@ def retry(task_id: str, package_id: str, *, owner: str, reason: str,
         if package["attempts"] >= package["max_attempts"]:
             raise HiveError("workplan package has exhausted its attempts")
         package.update(status="queued", lease=None)
+        if str(package.get("id") or "").startswith("worker-"):
+            for path in package.get("write_paths") or []:
+                scent.deposit(task, path=path, kind="need", by=owner, package_id=str(package["id"]))
         _record(task, "workplan_retried", package_id=package_id, owner=owner, reason=reason)
         _save(task, directory)
         return deepcopy(package)

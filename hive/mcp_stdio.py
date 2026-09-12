@@ -9,6 +9,7 @@ from .doctor import report as doctor_report
 from .inspect import inspect_task
 from .state import HiveError, create_task, load_task, mark_node, state_directory
 from .status_snapshot import snapshot
+from .scent import field as scent_field
 from .swarm import roster
 
 WHITELIST = (
@@ -20,6 +21,7 @@ WHITELIST = (
     "hive_snapshot",
     "hive_inspect",
     "hive_roster",
+    "hive_scent",
 )
 
 _VERDICT = {
@@ -56,6 +58,8 @@ def _tools() -> list[dict]:
         {"name": "hive_inspect", "description": "Why this task is stopped",
          "inputSchema": {"type": "object", "properties": {"task_id": {"type": "string"}}, "required": ["task_id"]}},
         {"name": "hive_roster", "description": "Queen/worker/soldier roster",
+         "inputSchema": {"type": "object", "properties": {"task_id": {"type": "string"}}, "required": ["task_id"]}},
+        {"name": "hive_scent", "description": "Decaying path marks",
          "inputSchema": {"type": "object", "properties": {"task_id": {"type": "string"}}, "required": ["task_id"]}},
     ]
 
@@ -99,6 +103,9 @@ def call_tool(name: str, arguments: dict | None) -> dict:
             return inspect_task(str(arguments["task_id"]), state_dir=state_directory())
         if name == "hive_roster":
             return roster(str(arguments["task_id"]))
+        if name == "hive_scent":
+            task = load_task(str(arguments["task_id"]), state_dir=state_directory())
+            return {"task_id": task["id"], "marks": scent_field(task)}
     except (HiveError, KeyError, OSError) as exc:
         return {"ok": False, "error": str(exc)}
     return {"ok": False, "error": "UNKNOWN_TOOL"}

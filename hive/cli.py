@@ -242,6 +242,9 @@ def main(argv=None) -> int:
     roster_cmd = sub.add_parser("roster", help="Who is running on a task")
     roster_cmd.add_argument("task_id")
     roster_cmd.add_argument("--state-dir", default="")
+    scent_cmd = sub.add_parser("scent", help="Decaying path marks the bees follow")
+    scent_cmd.add_argument("task_id")
+    scent_cmd.add_argument("--state-dir", default="")
     sub.add_parser("doctor")
     inspect_cmd = sub.add_parser("inspect")
     inspect_cmd.add_argument("task_id")
@@ -283,6 +286,10 @@ def main(argv=None) -> int:
         elif args.cmd == "roster":
             from .swarm import roster
             result = roster(args.task_id, state_dir=_dir(args.state_dir))
+        elif args.cmd == "scent":
+            from .scent import field
+            from .state import load_task
+            result = {"task_id": args.task_id, "marks": field(load_task(args.task_id, state_dir=_dir(args.state_dir)))}
         elif args.cmd == "doctor":
             from .doctor import report
             result = report()

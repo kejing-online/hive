@@ -179,8 +179,14 @@ def _conflicts(left: dict[str, Any], right: dict[str, Any]) -> bool:
     )
 
 
-def select_ready(plan: dict[str, Any], *, capacity: int | None = None) -> dict[str, Any]:
-    """Return schedulable queued package ids without changing ``plan``."""
+def select_ready(plan: dict[str, Any], *, capacity: int | None = None,
+                 scent_field: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    """Return schedulable queued package ids without changing ``plan``.
+
+    DAG edges and path locks stay law. When ``scent_field`` is present, ready
+    packages are ordered by attraction, and soldiers may follow unverified
+    traces even if a dependency has not been marked succeeded.
+    """
     validate_plan(plan)
     if capacity is not None and (not _is_int(capacity) or capacity < 0):
         raise HiveError("capacity must be a nonnegative integer or null")
@@ -190,22 +196,27 @@ def select_ready(plan: dict[str, Any], *, capacity: int | None = None) -> dict[s
     active = [package["id"] for package in packages if package["status"] == "running"]
     available = max(0, limit - len(active))
     blocked: dict[str, list[str]] = {}
-    candidates: list[tuple[int, int, dict[str, Any]]] = []
+    candidates: list[tuple[float, int, int, dict[str, Any]]] = []
+    live = list(scent_field or [])
+    from .scent import attraction, soldier_can_follow_scent
     for index, package in enumerate(packages):
         if package["status"] != "queued":
             if package["status"] != "running":
                 blocked[package["id"]] = [f"status is {package['status']}"]
             continue
         reasons = [f"dependency not succeeded: {dep}" for dep in package["depends_on"] if by_id[dep]["status"] != "succeeded"]
+        if reasons and live and soldier_can_follow_scent(package, live):
+            reasons = [row for row in reasons if not row.startswith("dependency not succeeded")]
         if package["attempts"] >= package["max_attempts"]:
             reasons.append("attempt budget exhausted")
         if reasons:
             blocked[package["id"]] = reasons
         else:
-            candidates.append((-package["priority"], index, package))
+            score = attraction(package, live) if live else 0.0
+            candidates.append((-score, -package["priority"], index, package))
     ready: list[str] = []
     reserved = [package for package in packages if package["status"] == "running"]
-    for _, _, package in sorted(candidates):
+    for _, _, _, package in sorted(candidates):
         identifier = package["id"]
         if len(ready) >= available:
             blocked[identifier] = ["capacity exhausted"]
